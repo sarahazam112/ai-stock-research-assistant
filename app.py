@@ -37,7 +37,7 @@ client = OpenAI(
 )
 
 HEADERS = {
-    "User-Agent": "AI Stock Research Assistant sarahazam@example.com"
+    "User-Agent": "Stock Research Assistant sarahazam@example.com"
 }
 
 def get_cik_from_ticker(ticker):
@@ -140,6 +140,14 @@ p, label {
     color: #111827 !important;
 }
 
+[data-testid="stSidebar"] {
+    background-color: #f5f7fb;
+}
+
+[data-testid="stSidebar"] * {
+    color: #111827 !important;
+}
+
 [data-testid="stMetricValue"] {
     font-size: 2rem;
     color: #2563eb;
@@ -173,6 +181,19 @@ page = st.sidebar.radio(
     ]
 )
 
+st.markdown("### Quick Navigation")
+
+page = st.radio(
+    "Choose a page",
+    [
+        "Research Assistant",
+        "Stock Comparison",
+        "Portfolio vs S&P 500"
+    ],
+    horizontal=True,
+    label_visibility="collapsed"
+)
+
 if page == "Research Assistant":
     st.title("AI Stock Research Assistant")
 
@@ -182,7 +203,7 @@ if page == "Research Assistant":
 
     company_input = st.text_input(
         "Enter company name or stock ticker",
-        placeholder="Example: Apple, Tesla, Air Canada, AAPL, TSLA"
+        placeholder="Example: AAPL, VOO, GLD, BTC-USD"
     )
 
     uploaded_file = st.file_uploader(
@@ -532,91 +553,89 @@ elif page == "Stock Comparison":
         "Industry Comparison"
     ])
 
-    st.write("Compare two or more stocks by price performance, returns, volatility, and key ratios.")
-
-    stock_input = st.text_input(
-        "Enter tickers separated by commas",
-        placeholder="Example: AAPL, MSFT, TSLA"
-    )
-
     with compare_tab1:
+        st.write("Compare two or more stocks by price performance, returns, volatility, and key ratios.")
+
+        stock_input = st.text_input(
+            "Enter tickers separated by commas",
+            placeholder="Example: AAPL, MSFT, TSLA",
+            key="custom_stock_input"
+        )
+
         compare_sp500 = st.checkbox("Compare to S&P 500")
+
+        if stock_input:
+            tickers = [t.strip().upper() for t in stock_input.split(",") if t.strip()]
+
+            if compare_sp500:
+                tickers.append("^GSPC")
+
+            data = yf.download(
+                tickers,
+                period="1y",
+                auto_adjust=True
+            )["Close"]
 
         compare_button = st.button("Compare Stocks")
 
-        if compare_button:
+        if stock_input and (
+            compare_button
+            or st.session_state.get("custom_stock_input")
+        ):
 
-            if not stock_input:
-                st.warning("Please enter at least one ticker.")
+            if isinstance(data, pd.Series):
+                data = data.to_frame(name=tickers[0])
 
-            else:
-                tickers = [t.strip().upper() for t in stock_input.split(",")]
+            normalized_data = data / data.iloc[0] * 100
 
-                if compare_sp500:
-                    tickers.append("^GSPC")
+            st.subheader("Normalized Performance Chart")
 
-                data = yf.download(
-                    tickers,
-                    period="1y",
-                    auto_adjust=True
-                )["Close"]
+            fig = go.Figure()
 
-                normalized_data = data / data.iloc[0] * 100
-
-                st.subheader("Normalized Performance Chart")
-
-                fig = go.Figure()
-
-                for t in normalized_data.columns:
-
-                    fig.add_trace(
-                        go.Scatter(
-                            x=normalized_data.index,
-                            y=normalized_data[t],
-                            mode="lines",
-                            name=t
-                        )
+            for t in normalized_data.columns:
+                fig.add_trace(
+                    go.Scatter(
+                        x=normalized_data.index,
+                        y=normalized_data[t],
+                        mode="lines",
+                        name=t
                     )
-
-                fig.update_layout(
-                    title="Stock Performance Comparison",
-                    xaxis_title="Date",
-                    yaxis_title="Growth of $100 Investment",
-                    height=600
                 )
 
-                st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(
+                title="Stock Performance Comparison",
+                xaxis_title="Date",
+                yaxis_title="Growth of $100 Investment",
+                height=600
+            )
 
-                st.subheader("Performance Summary")
+            st.plotly_chart(fig, use_container_width=True)
 
-                returns = ((data.iloc[-1] / data.iloc[0]) - 1) * 100
+            returns = ((data.iloc[-1] / data.iloc[0]) - 1) * 100
+            daily_returns = data.pct_change().dropna()
+            volatility = daily_returns.std() * (252 ** 0.5) * 100
+            avg_daily_return = daily_returns.mean() * 100
 
-                st.dataframe(
-                    returns.rename("1-Year Return (%)").round(2)
-                )
-                daily_returns = data.pct_change().dropna()
+            summary_table = pd.DataFrame({
+                "1-Year Return (%)": returns.round(2),
+                "Annualized Volatility (%)": volatility.round(2),
+                "Average Daily Return (%)": avg_daily_return.round(3)
+            })
 
-                volatility = daily_returns.std() * (252 ** 0.5) * 100
-                avg_daily_return = daily_returns.mean() * 100
+            st.subheader("Performance Summary")
+            st.dataframe(summary_table)
 
-                summary_table = pd.DataFrame({
-                    "1-Year Return (%)": returns.round(2),
-                    "Annualized Volatility (%)": volatility.round(2),
-                    "Average Daily Return (%)": avg_daily_return.round(3)
-                })
+            best_stock = returns.idxmax()
+            worst_stock = returns.idxmin()
 
-                st.dataframe(summary_table)
+            col1, col2 = st.columns(2)
 
-                best_stock = returns.idxmax()
-                worst_stock = returns.idxmin()
+            with col1:
+                st.metric("Best Performer", best_stock, f"{returns[best_stock]:.2f}%")
 
-                col1, col2 = st.columns(2)
+            with col2:
+                st.metric("Worst Performer", worst_stock, f"{returns[worst_stock]:.2f}%")
 
-                with col1:
-                    st.metric("Best Performer", best_stock, f"{returns[best_stock]:.2f}%")
-
-                with col2:
-                    st.metric("Worst Performer", worst_stock, f"{returns[worst_stock]:.2f}%")
     with compare_tab2:
         st.subheader("Compare a Stock to Its Industry")
 
@@ -628,56 +647,31 @@ elif page == "Stock Comparison":
 
         industry_etfs = {
             "S&P 500": "^GSPC",
-
-            # Technology
             "Technology": "XLK",
             "Semiconductors": "SOXX",
             "Cybersecurity": "HACK",
             "Cloud Computing": "SKYY",
-
-            # Healthcare
             "Healthcare": "XLV",
             "Biotech": "XBI",
             "Pharmaceuticals": "IHE",
-
-            # Financials
             "Financials": "XLF",
             "Banks": "KBE",
             "Regional Banks": "KRE",
             "Insurance": "KIE",
-
-            # Energy
             "Energy": "XLE",
             "Oil & Gas": "XOP",
             "Clean Energy": "ICLN",
-
-            # Consumer
             "Consumer Discretionary": "XLY",
             "Retail": "XRT",
-            "Luxury": "LUX",
-
-            # Industrial / Auto
             "Industrials": "XLI",
             "Automotive": "CARZ",
             "Transportation": "XTN",
             "Aerospace & Defense": "ITA",
-
-            # Real Estate
             "Real Estate": "XLRE",
             "REITs": "VNQ",
-
-            # Communication
             "Communication Services": "XLC",
-            "Media & Entertainment": "VOX",
-
-            # Utilities
             "Utilities": "XLU",
-
-            # Materials
-            "Materials": "XLB",
-
-            # Consulting / Business Services
-            "Consulting & Professional Services": "VGT"
+            "Materials": "XLB"
         }
 
         industry_choice = st.selectbox(
@@ -685,52 +679,46 @@ elif page == "Stock Comparison":
             list(industry_etfs.keys())
         )
 
-        if st.button("Compare to Industry"):
-            if not main_stock:
-                st.warning("Please enter a stock ticker.")
+        industry_button = st.button("Compare to Industry")
+        if main_stock:
+            benchmark = industry_etfs[industry_choice]
+            tickers = [main_stock.upper(), benchmark]
 
-            else:
-                benchmark = industry_etfs[industry_choice]
-                tickers = [main_stock.upper(), benchmark]
+            data = yf.download(
+                tickers,
+                period="1y",
+                auto_adjust=True
+            )["Close"]
 
-                data = yf.download(
-                    tickers,
-                    period="1y",
-                    auto_adjust=True
-                )["Close"]
+            normalized_data = data / data.iloc[0] * 100
 
-                normalized_data = data / data.iloc[0] * 100
+            st.subheader(f"{main_stock.upper()} vs {industry_choice}")
 
-                st.subheader(f"{main_stock.upper()} vs {industry_choice}")
+            fig = go.Figure()
 
-                fig = go.Figure()
-
-                for t in normalized_data.columns:
-                    fig.add_trace(
-                        go.Scatter(
-                            x=normalized_data.index,
-                            y=normalized_data[t],
-                            mode="lines",
-                            name=t
-                        )
+            for t in normalized_data.columns:
+                fig.add_trace(
+                    go.Scatter(
+                        x=normalized_data.index,
+                        y=normalized_data[t],
+                        mode="lines",
+                        name=t
                     )
-
-                fig.update_layout(
-                    title=f"{main_stock.upper()} Compared to {industry_choice}",
-                    xaxis_title="Date",
-                    yaxis_title="Growth of $100 Investment",
-                    height=600
                 )
 
-                st.plotly_chart(fig, use_container_width=True)
+            fig.update_layout(
+                title=f"{main_stock.upper()} Compared to {industry_choice}",
+                xaxis_title="Date",
+                yaxis_title="Growth of $100 Investment",
+                height=600
+            )
 
-                returns = ((data.iloc[-1] / data.iloc[0]) - 1) * 100
+            st.plotly_chart(fig, use_container_width=True)
 
-                st.subheader("Return Comparison")
+            returns = ((data.iloc[-1] / data.iloc[0]) - 1) * 100
 
-                st.dataframe(
-                    returns.rename("1-Year Return (%)").round(2)
-                )
+            st.subheader("Return Comparison")
+            st.dataframe(returns.rename("1-Year Return (%)").round(2))
 
 elif page == "Portfolio vs S&P 500":
     st.title("Portfolio vs S&P 500")
@@ -738,7 +726,7 @@ elif page == "Portfolio vs S&P 500":
     st.write("Create a sample portfolio and compare its performance against the S&P 500.")
 
     portfolio_input = st.text_input(
-        "Enter portfolio tickers separated by commas",
+        "Enter stocks, ETFs, commodities, or crypto tickers",
         placeholder="Example: AAPL, MSFT, NVDA"
     )
 
