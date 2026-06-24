@@ -37,7 +37,7 @@ client = OpenAI(
 )
 
 HEADERS = {
-    "User-Agent": "Stock Research Assistant sarahazam@example.com"
+    "User-Agent": "Portfolio Analytics Platform sarahazam@example.com"
 }
 
 def get_cik_from_ticker(ticker):
@@ -103,7 +103,7 @@ def get_latest_filing_url(ticker, form_type="10-K"):
     return None
 
 st.set_page_config(
-    page_title="AI Stock Research Assistant",
+    page_title="Portfolio Analytics Platform",
     page_icon="📈",
     layout="wide"
 )
@@ -114,8 +114,22 @@ st.markdown("""
     background-color: #f5f7fb;
 }
 
+.stButton button {
+    background-color: #2563eb !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+    padding: 10px 24px !important;
+}
+
+.stButton button:hover {
+    background-color: #1d4ed8 !important;
+}
+
 .stButton button p {
     color: white !important;
+    font-weight: 600 !important;
 }
 
 .block-container {
@@ -170,42 +184,75 @@ pre {
 </style>
 """, unsafe_allow_html=True)
 
+PAGES = [
+    "Custom Portfolio",
+    "Portfolio vs S&P 500",
+    "AI Summary"
+]
+
+if "nav_page" not in st.session_state:
+    st.session_state["nav_page"] = PAGES[0]
+if "sidebar_nav_page" not in st.session_state:
+    st.session_state["sidebar_nav_page"] = st.session_state["nav_page"]
+if "top_nav_page" not in st.session_state:
+    st.session_state["top_nav_page"] = st.session_state["nav_page"]
+
+
+def sync_from_sidebar():
+    st.session_state["nav_page"] = st.session_state["sidebar_nav_page"]
+    st.session_state["top_nav_page"] = st.session_state["nav_page"]
+
+
+def sync_from_top():
+    st.session_state["nav_page"] = st.session_state["top_nav_page"]
+    st.session_state["sidebar_nav_page"] = st.session_state["nav_page"]
+
+
 st.sidebar.title("Navigation")
 
-page = st.sidebar.radio(
+st.sidebar.radio(
     "Go to",
-    [
-        "Research Assistant",
-        "Stock Comparison",
-        "Portfolio vs S&P 500"
-    ]
+    PAGES,
+    key="sidebar_nav_page",
+    on_change=sync_from_sidebar
 )
+
+st.title("Portfolio Analytics Platform")
 
 st.markdown("### Quick Navigation")
 
-page = st.radio(
+st.radio(
     "Choose a page",
-    [
-        "Research Assistant",
-        "Stock Comparison",
-        "Portfolio vs S&P 500"
-    ],
+    PAGES,
     horizontal=True,
-    label_visibility="collapsed"
+    label_visibility="collapsed",
+    key="top_nav_page",
+    on_change=sync_from_top
 )
 
-if page == "Research Assistant":
-    st.title("AI Stock Research Assistant")
+page = st.session_state["nav_page"]
 
-    st.write(
-        "Upload financial documents or enter a stock ticker to generate an AI-powered research summary."
-    )
+if page == "AI Summary":
+    st.header("📊 AI Summary")
 
+    st.markdown("""
+    **Get instant insights on any stock.** Upload financial documents or enter a ticker to see:
+    - Company overview & financials
+    - Key ratios & metrics  
+    - AI-powered research summary
+    
+    Perfect for quick due diligence before investing.
+    """)
+
+    st.markdown("### Search by ticker")
+    st.write("Find a company by official ticker or name, then click Analyze.")
     company_input = st.text_input(
         "Enter company name or stock ticker",
         placeholder="Example: AAPL, VOO, GLD, BTC-USD"
     )
 
+    st.markdown("### Upload a financial report")
+    st.write("Upload an earnings report, 10-K, or financial statement for AI review.")
     uploaded_file = st.file_uploader(
         "Upload an earnings report, 10-K, or financial statement",
         type=["pdf", "csv", "txt"]
@@ -218,11 +265,16 @@ if page == "Research Assistant":
         ticker, company_name = search_company(company_input)
 
         if ticker:
-            st.info(f"Using {company_name} ({ticker})")
+            st.info(f"✓ Using {company_name} ({ticker})")
         else:
             st.warning("Could not find that company. Try the official ticker.")
 
-    if st.button("Analyze"):
+    # Use columns to keep button placement stable
+    col_btn, col_spacer = st.columns([1, 4])
+    with col_btn:
+        analyze_clicked = st.button("Analyze", use_container_width=True)
+    
+    if analyze_clicked:
         if not ticker and not uploaded_file:
             st.warning("Please enter a ticker or upload a file.")
 
@@ -545,8 +597,17 @@ Do not give financial advice.
 
             else:
                 st.info("Upload a PDF to analyze a financial document.")
-elif page == "Stock Comparison":
-    st.title("Stock Comparison")
+elif page == "Custom Portfolio":
+    st.header("💼 Custom Portfolio")
+
+    st.markdown("""
+    **Build and compare your own stock portfolio.** See how your picks perform:
+    - Compare multiple stocks side-by-side
+    - Analyze vs industry benchmarks
+    - Visualize 1-year performance
+    
+    Great for testing investment ideas before committing real money.
+    """)
 
     compare_tab1, compare_tab2 = st.tabs([
         "Custom Comparison",
@@ -554,7 +615,7 @@ elif page == "Stock Comparison":
     ])
 
     with compare_tab1:
-        st.write("Compare two or more stocks by price performance, returns, volatility, and key ratios.")
+        st.markdown("**Compare two or more stocks** by price performance, returns, volatility, and key ratios.")
 
         stock_input = st.text_input(
             "Enter tickers separated by commas",
@@ -721,23 +782,41 @@ elif page == "Stock Comparison":
             st.dataframe(returns.rename("1-Year Return (%)").round(2))
 
 elif page == "Portfolio vs S&P 500":
-    st.title("Portfolio vs S&P 500")
+    st.header("📈 Portfolio vs S&P 500")
 
-    st.write("Create a sample portfolio and compare its performance against the S&P 500.")
+    st.markdown("""
+    **Test your portfolio against the market.** Create a sample portfolio to see:
+    - Side-by-side performance comparison
+    - Your portfolio return vs S&P 500
+    - How much you beat (or lag) the market
+    
+    Great for understanding if your stock picks can outperform a simple index fund.
+    """)
 
-    portfolio_input = st.text_input(
-        "Enter stocks, ETFs, commodities, or crypto tickers",
-        placeholder="Example: AAPL, MSFT, NVDA"
-    )
+    st.write("")  # Add spacer
+    
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        portfolio_input = st.text_input(
+            "Enter stocks, ETFs, commodities, or crypto tickers",
+            placeholder="Example: AAPL, MSFT, NVDA"
+        )
+    
+    with col2:
+        initial_investment = st.number_input(
+            "Initial investment amount",
+            min_value=100,
+            value=10000,
+            step=500
+        )
+    
+    with col3:
+        st.write("")  # spacer
+        st.write("")  # spacer
+        run_test = st.button("Run Test", use_container_width=True)
 
-    initial_investment = st.number_input(
-        "Initial investment amount",
-        min_value=100,
-        value=10000,
-        step=500
-    )
-
-    if st.button("Run Portfolio Test"):
+    if run_test:
 
         if not portfolio_input:
             st.warning("Please enter at least one ticker.")
@@ -808,6 +887,5 @@ elif page == "Portfolio vs S&P 500":
             with col3:
                 difference = portfolio_return - sp500_return
                 st.metric("Outperformance", f"{difference:.2f}%")
-
 
 
